@@ -77,6 +77,20 @@ MEMORY_EXTRACT_INTERVAL = int(os.getenv("MEMORY_EXTRACT_INTERVAL", "3"))
 # 前端访问密码（不设就不需要密码）
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
 
+# ============================================================
+# 上游 UA 伪装 Profile（应对 MuYuan 等中转白名单翻转）
+# ============================================================
+MUYUAN_UA_PROFILES = {
+    "claude-cli":  {"User-Agent": "claude-cli/1.0.119 (external, cli)", "x-app": "cli"},
+    "codex-cli":   {"User-Agent": "codex_cli_rs/0.1.73",                "x-app": "codex"},
+    "cursor":      {"User-Agent": "cursor/0.44.11 VSCode/1.95.3",       "x-app": "cursor"},
+    "windsurf":    {"User-Agent": "windsurf/1.8.4 VSCode/1.95.3",       "x-app": "windsurf"},
+    "opencode":    {"User-Agent": "opencode/0.1.76",                    "x-app": "opencode"},
+    "aider":       {"User-Agent": "aider/0.64.1",                       "x-app": "aider"},
+    "continue":    {"User-Agent": "continue/0.9.246",                   "x-app": "continue"},
+    "none":        {},
+}
+
 
 # ============================================================
 # 动态配置读取（v3.1）
@@ -1255,6 +1269,13 @@ async def chat_completions(request: Request):
     if "openrouter" in chat_api_url:
         headers["HTTP-Referer"] = EXTRA_REFERER
         headers["X-Title"] = EXTRA_TITLE
+
+    # UA Profile 伪装（应对中转白名单）
+    _ua_profile_key = await get_config("muyuan_ua_profile") or "claude-cli"
+    _ua_extra = MUYUAN_UA_PROFILES.get(_ua_profile_key, {})
+    if _ua_extra:
+        headers.update(_ua_extra)
+        print(f"🎭 UA Profile [{_ua_profile_key}]: {_ua_extra.get('User-Agent', '')}")
     
     is_stream = body.get("stream", False)
     
@@ -1456,7 +1477,8 @@ async def chat_completions(request: Request):
                 try:
                     err_content = response.json()
                 except Exception:
-                    err_content = {"error": response.text[:500]}
+                    err_content = {"error": {"message": response.text[:500], "status": response.status_code}}
+                print(f"❌ 非流式请求失败 [{response.status_code}]: {str(err_content)[:300]}")
                 return JSONResponse(status_code=response.status_code, content=err_content)
 
 
@@ -1878,8 +1900,21 @@ async def stream_and_capture(headers: dict, body: dict, session_id: str, user_me
                 error_body = b""
                 async for chunk in response.aiter_bytes():
                     error_body += chunk
-                print(f"❌ 流式请求失败 [{response.status_code}]: {error_body[:500].decode('utf-8', errors='ignore')}")
-                err_msg = f"⚠️ 请求失败 ({response.status_code})"
+                error_text = error_body[:2000].decode('utf-8', errors='ignore')
+                print(f"❌ 流式请求失败 [{response.status_code}]: {error_text[:500]}")
+                err_msg = f"⚠️ 上游错误 {response.status_code}"
+                try:
+                    err_json = json.loads(error_text)
+                    detail = err_json.get("error") or err_json.get("message") or ""
+                    if isinstance(detail, dict):
+                        detail = detail.get("message", "") or detail.get("msg", "") or str(detail)
+                    if detail:
+                        err_msg += f"\n\n```\n{str(detail)[:400]}\n```"
+                    elif error_text.strip():
+                        err_msg += f"\n\n```\n{error_text[:400]}\n```"
+                except Exception:
+                    if error_text.strip():
+                        err_msg += f"\n\n```\n{error_text[:400]}\n```"
                 err_payload = json.dumps({'choices': [{'delta': {'content': err_msg}, 'finish_reason': None}], 'model': model}, ensure_ascii=False)
                 yield f"data: {err_payload}\n\n".encode("utf-8")
                 yield b"data: [DONE]\n\n"
@@ -3235,6 +3270,29 @@ async def api_delete_category(category_id: int):
 # ============================================================
 # 联网搜索 API（v3.8）
 # ============================================================
+
+@app.get("/admin/ua-profiles")
+async def api_get_ua_profiles():
+    """获取所有 UA Profile 及当前激活的 Profile"""
+    current = await get_config("muyuan_ua_profile") or "claude-cli"
+    profiles = [
+        {"key": k, "user_agent": v.get("User-Agent", ""), "x_app": v.get("x-app", ""), "active": k == current}
+        for k, v in MUYUAN_UA_PROFILES.items()
+    ]
+    return {"profiles": profiles, "current": current}
+
+
+@app.put("/admin/ua-profiles/active")
+async def api_set_ua_profile(request: Request):
+    """切换 UA Profile"""
+    body = await request.json()
+    key = body.get("key", "")
+    if key not in MUYUAN_UA_PROFILES:
+        return JSONResponse(status_code=400, content={"error": f"未知 profile: {key}"})
+    await set_config("muyuan_ua_profile", key)
+    profile = MUYUAN_UA_PROFILES[key]
+    return {"ok": True, "active": key, "user_agent": profile.get("User-Agent", ""), "x_app": profile.get("x-app", "")}
+
 
 @app.get("/admin/search-engines")
 async def api_get_search_engines():

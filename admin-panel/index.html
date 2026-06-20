@@ -231,6 +231,19 @@ tailwind.config = {
         <button class="btn btn-secondary" onclick="triggerMigrate()">开始迁移</button>
       </div>
     </div>
+
+    <!-- UA Profile Switcher (full width) -->
+    <div class="bg-panel-card border border-panel-border rounded-lg p-5 mt-4">
+      <div class="flex items-center justify-between mb-1">
+        <p class="font-semibold">🎭 上游 UA 伪装</p>
+        <span id="ua-current-badge" class="badge imp-mid text-xs">加载中…</span>
+      </div>
+      <p class="text-xs text-gray-500 mb-4">当中转报 400/429 时切换 Profile，不需要重启服务。</p>
+      <div id="ua-profiles-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+        <p class="text-gray-500 text-sm col-span-4">加载中…</p>
+      </div>
+      <div id="ua-active-info" class="text-xs text-gray-500 font-mono mt-1"></div>
+    </div>
   </div>
 
 </main>
@@ -297,7 +310,7 @@ function switchTab(tab) {
   if (tab === 'providers') loadProviders();
   if (tab === 'memories') loadMemories();
   if (tab === 'prompt') loadPrompt();
-  if (tab === 'tools') loadDreamStatus();
+  if (tab === 'tools') { loadDreamStatus(); loadUaProfiles(); }
 }
 
 // ============================================================
@@ -728,6 +741,53 @@ async function triggerMigrate() {
     const data = await apiJson('/admin/migrate-embeddings');
     toast(`✅ 迁移完成：${data.migrated || 0} 条`);
   } catch(e) { toast('❌ 迁移失败', false); }
+}
+
+// ============================================================
+// UA Profile Switcher
+// ============================================================
+async function loadUaProfiles() {
+  try {
+    const data = await apiJson('/admin/ua-profiles');
+    const current = data.current || 'none';
+    document.getElementById('ua-current-badge').textContent = current;
+
+    const list = document.getElementById('ua-profiles-list');
+    list.innerHTML = data.profiles.map(p => {
+      const isActive = p.active;
+      const cardClass = isActive
+        ? 'border-2 border-kiwi-500 bg-kiwi-900/20 cursor-default'
+        : 'border border-panel-border hover:border-gray-500 cursor-pointer';
+      const label = isActive ? `<span class="text-kiwi-400 text-xs font-semibold">✓ 当前</span>` : '';
+      return `
+        <div class="rounded-lg p-3 ${cardClass}" onclick="${isActive ? '' : `switchUaProfile('${p.key}')`}">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-semibold text-sm">${escHtml(p.key)}</span>${label}
+          </div>
+          <div class="text-xs text-gray-500 font-mono truncate" title="${escAttr(p.user_agent)}">${escHtml(p.user_agent || '(无伪装)')}</div>
+          ${p.x_app ? `<div class="text-xs text-gray-600 mt-0.5">x-app: ${escHtml(p.x_app)}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const active = data.profiles.find(p => p.active);
+    if (active && active.user_agent) {
+      document.getElementById('ua-active-info').textContent =
+        `User-Agent: ${active.user_agent}${active.x_app ? '  |  x-app: ' + active.x_app : ''}`;
+    } else {
+      document.getElementById('ua-active-info').textContent = '';
+    }
+  } catch(e) {
+    document.getElementById('ua-profiles-list').innerHTML = `<p class="text-red-400 text-sm col-span-4">加载失败：${e.message}</p>`;
+  }
+}
+
+async function switchUaProfile(key) {
+  try {
+    const data = await apiJson('/admin/ua-profiles/active', { method: 'PUT', body: JSON.stringify({ key }) });
+    if (!data.ok) throw new Error(data.error || '切换失败');
+    toast(`✅ 已切换到 ${key}`);
+    loadUaProfiles();
+  } catch(e) { toast(`❌ ${e.message}`, false); }
 }
 
 // ============================================================

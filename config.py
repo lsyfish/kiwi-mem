@@ -85,6 +85,8 @@ CONFIG_SCHEMA = {
     "quick_phrases":         ("",                        "",     "快捷短语",          "text"),
     "mcp_switches":          ("",                        "",     "MCP开关状态",       "text"),
     "theme_preference":      ("",                        "",     "主题偏好",          "text"),
+    # 上游 UA 伪装 Profile（应对 MuYuan 等中转白名单变动）
+    "muyuan_ua_profile":     ("",                        "claude-cli", "上游 UA Profile", "text"),
 }
 
 
