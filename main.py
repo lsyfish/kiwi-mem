@@ -1902,7 +1902,12 @@ async def stream_and_capture(headers: dict, body: dict, session_id: str, user_me
                     error_body += chunk
                 error_text = error_body[:2000].decode('utf-8', errors='ignore')
                 print(f"❌ 流式请求失败 [{response.status_code}]: {error_text[:500]}")
-                err_msg = f"⚠️ 上游错误 {response.status_code}"
+                if response.status_code == 429:
+                    err_msg = "⚠️ 上游限流（429）：请求太频繁，稍后再试"
+                elif response.status_code == 400:
+                    err_msg = "⚠️ 上游拒绝请求（400）：可能是 UA 白名单变动，建议在管理面板 → 工具 → UA 伪装 切换 Profile"
+                else:
+                    err_msg = f"⚠️ 上游错误 {response.status_code}"
                 try:
                     err_json = json.loads(error_text)
                     detail = err_json.get("error") or err_json.get("message") or ""
