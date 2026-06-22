@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>港币 ↔ 人民币</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f5;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px 24px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  h1 { font-size: 18px; font-weight: 600; color: #111; margin-bottom: 4px; }
+  .rate-line { font-size: 12px; color: #888; margin-bottom: 24px; }
+  .rate-line span { color: #e53e3e; font-weight: 500; }
+
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .input-wrap {
+    display: flex;
+    align-items: center;
+    border: 1.5px solid #e2e2e2;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .input-wrap:focus-within { border-color: #e53e3e; }
+  .currency-tag {
+    padding: 12px 14px;
+    background: #fafafa;
+    font-size: 14px;
+    font-weight: 600;
+    color: #444;
+    border-right: 1.5px solid #e2e2e2;
+    min-width: 54px;
+    text-align: center;
+  }
+  input[type=number] {
+    flex: 1;
+    border: none;
+    outline: none;
+    padding: 12px 14px;
+    font-size: 18px;
+    font-weight: 500;
+    color: #111;
+    background: transparent;
+    width: 100%;
+  }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  .divider {
+    text-align: center;
+    color: #ccc;
+    font-size: 20px;
+    margin: 4px 0 4px;
+    user-select: none;
+  }
+
+  .result-box {
+    background: #fff5f5;
+    border: 1.5px solid #fed7d7;
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .result-box .label { font-size: 11px; color: #888; margin-bottom: 4px; }
+  .result-box .value { font-size: 28px; font-weight: 700; color: #c53030; }
+  .result-box .unit  { font-size: 13px; color: #888; margin-top: 2px; }
+
+  .edit-rate {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #888;
+  }
+  .edit-rate span { white-space: nowrap; }
+  .edit-rate input {
+    flex: 1;
+    border: 1px solid #e2e2e2;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 12px;
+    outline: none;
+    color: #333;
+  }
+  .edit-rate input:focus { border-color: #e53e3e; }
+  .edit-rate button {
+    padding: 5px 10px;
+    border: none;
+    background: #e53e3e;
+    color: #fff;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>港币 ↔ 人民币</h1>
+  <p class="rate-line">当前汇率：1 CNY = <span id="rate-display">1.14998</span> HKD</p>
+
+  <div class="field">
+    <label>人民币</label>
+    <div class="input-wrap">
+      <div class="currency-tag">CNY</div>
+      <input type="number" id="cny" placeholder="0.00" oninput="fromCny(this.value)">
+    </div>
+  </div>
+
+  <div class="divider">⇅</div>
+
+  <div class="field" style="margin-top:16px">
+    <label>港币</label>
+    <div class="input-wrap">
+      <div class="currency-tag">HKD</div>
+      <input type="number" id="hkd" placeholder="0.00" oninput="fromHkd(this.value)">
+    </div>
+  </div>
+
+  <div class="edit-rate">
+    <span>1 HKD =</span>
+    <input type="number" id="rate-input" value="0.86957" step="0.00001">
+    <span>CNY</span>
+    <button onclick="updateRate()">更新</button>
+  </div>
+</div>
+
+<script>
+  let HKD_TO_CNY = 0.86957;
+
+  function rateDisplay() {
+    return (1 / HKD_TO_CNY).toFixed(5);
+  }
+
+  function updateRate() {
+    const v = parseFloat(document.getElementById('rate-input').value);
+    if (!v || v <= 0) return;
+    HKD_TO_CNY = v;
+    document.getElementById('rate-display').textContent = rateDisplay();
+    // 重算当前值
+    const cny = parseFloat(document.getElementById('cny').value);
+    if (cny) fromCny(cny);
+  }
+
+  function fromCny(val) {
+    const n = parseFloat(val);
+    document.getElementById('hkd').value = isNaN(n) ? '' : (n / HKD_TO_CNY).toFixed(2);
+  }
+
+  function fromHkd(val) {
+    const n = parseFloat(val);
+    document.getElementById('cny').value = isNaN(n) ? '' : (n * HKD_TO_CNY).toFixed(2);
+  }
+</script>
+</body>
+</html>
